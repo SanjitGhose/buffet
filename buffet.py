@@ -15,17 +15,28 @@ st.markdown("""
     .stApp { background-color: #ffffff !important; }
     h1, h2, h3 { color: #0f172a !important; font-weight: 800 !important; }
 
-    /* SIDEBAR & DROPDOWN CONTRAST */
+    /* SIDEBAR & DROPDOWN CONTRAST FIX */
     [data-testid="stSidebar"] {
-        background-color: #f8fafc !important;
-        border-right: 2px solid #e2e8f0;
+        background-color: #f1f5f9 !important;
+        border-right: 2px solid #cbd5e1;
     }
     
-    /* Force Dropdown and Sidebar labels to be Deep Navy */
+    /* Targeting the specific Dropdown (Selectbox) for High Contrast */
+    div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #0f172a !important;
+    }
+    
+    /* Ensuring the text inside the dropdown is dark */
+    div[data-baseweb="select"] * {
+        color: #0f172a !important;
+        font-weight: 600 !important;
+    }
+
+    /* Sidebar text contrast */
     [data-testid="stSidebar"] p, 
-    [data-testid="stSidebar"] label,
-    div[data-baseweb="select"] span,
-    div[data-baseweb="select"] div {
+    [data-testid="stSidebar"] label {
         color: #0f172a !important;
         font-weight: 700 !important;
         font-size: 1rem !important;
@@ -59,7 +70,8 @@ def get_nifty_tickers(universe):
         df = pd.read_csv(url)
         return [str(s) + ".NS" for s in df['Symbol'].tolist()]
     except:
-        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ITC.NS"]
+        # Static Fallback List
+        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ITC.NS", "HINDUNILVR.NS", "ICICIBANK.NS"]
 
 def analyze_stock(ticker):
     try:
@@ -79,7 +91,7 @@ def analyze_stock(ticker):
         graham_val = np.sqrt(22.5 * eps * book_val) if (eps > 0 and book_val > 0) else 0
 
         # --- THE STRICT BUFFETT-GRAHAM FILTER ---
-        # Efficiency (>15%) | Momentum (>5%) | Moat (>15%) | STRICT VALUE (<25)
+        # ROE > 15 | Growth > 5 | Margin > 15 | PE < 25
         if (15 < roe < 100 and rev_growth > 5 and gross_margin > 15 and 0 < pe < 25):
             return {
                 "Ticker": ticker.replace(".NS", ""),
@@ -97,7 +109,7 @@ def analyze_stock(ticker):
 # ==========================================
 
 st.markdown('<h1>🏛️ The Buffett Way</h1>', unsafe_allow_html=True)
-st.markdown('<h3>Institutional Value & Quality Engine</h3>', unsafe_allow_html=True)
+st.markdown('<h3>Premium Value & Quality Screener</h3>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("## ⚙️ SETTINGS")
@@ -112,7 +124,7 @@ with st.sidebar:
 if st.button(f"🔍 SCAN {universe}"):
     tickers = get_nifty_tickers(universe)
     
-    with st.spinner(f"Auditing {len(tickers)} stocks for intrinsic value..."):
+    with st.spinner(f"Auditing {len(tickers)} stocks..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
             future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
@@ -123,7 +135,7 @@ if st.button(f"🔍 SCAN {universe}"):
     if results:
         df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
-        # Formatting for Readability
+        # UI Formatting
         styled_df = df.style.background_gradient(subset=["ROE (%)"], cmap="YlGn") \
                            .background_gradient(subset=["P/E"], cmap="YlOrRd_r") \
                            .format({
@@ -136,4 +148,4 @@ if st.button(f"🔍 SCAN {universe}"):
 
         st.dataframe(styled_df, use_container_width=True, height=600)
     else:
-        st.error("No companies met the strict P/E < 25 and ROE > 15 criteria today.")
+        st.error("No companies met the strict criteria. The market might be currently overvalued.")

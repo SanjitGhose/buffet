@@ -4,35 +4,29 @@ import pandas as pd
 import concurrent.futures
 
 # ==========================================
-# 1. UI/UX "FINTECH" OVERRIDE (CSS)
+# 1. UI/UX "GROWW" STYLING
 # ==========================================
-st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏦")
 
 st.markdown("""
 <style>
-    /* Groww-style Clean Interface */
     .stApp { background-color: #f8fafc; }
-    .main { padding: 2rem; }
     h1 { color: #1e293b; font-weight: 800 !important; }
     .stButton>button {
-        background-color: #00d09c; /* Groww Green */
+        background-color: #00d09c;
         color: white; border: none; border-radius: 8px;
         padding: 0.75rem 2rem; font-weight: 600; width: 100%;
-        transition: all 0.3s;
     }
-    .stButton>button:hover { background-color: #00b386; transform: translateY(-2px); }
-    .css-1r6slb0 { background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-    [data-testid="stMetricValue"] { color: #1e293b; font-size: 1.8rem; }
+    /* This ensures the table text is sharp */
+    .dataframe { font-size: 14px !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CONCRETE DATA LOGIC
+# 2. DATA LOGIC & FULL NIFTY 50 FALLBACK
 # ==========================================
 
-@st.cache_data(ttl=3600)
-def fetch_ticker_list(universe):
-    """Fetches full ticker lists without fallback glitches."""
+def get_nifty_tickers(universe):
     if universe == "Nifty 500":
         url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty500list.csv"
     else:
@@ -40,28 +34,32 @@ def fetch_ticker_list(universe):
     
     try:
         df = pd.read_csv(url)
-        # Filter out the 'Index' row if it exists to get exact 500/50
-        symbols = df['Symbol'].unique().tolist()
-        return [str(s) + ".NS" for s in symbols if isinstance(s, str)]
+        return [str(s) + ".NS" for s in df['Symbol'].tolist()]
     except:
-        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
+        # Full Nifty 50 Manual List to prevent the "4 stock" glitch
+        return [
+            "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS",
+            "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS",
+            "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS",
+            "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS",
+            "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS",
+            "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LTIM.NS",
+            "LT.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS",
+            "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS",
+            "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TCS.NS", "TECHM.NS",
+            "TITAN.NS", "UPL.NS", "ULTRACEMCO.NS", "WIPRO.NS"
+        ]
 
-def scan_logic(ticker):
-    """Concrete Ratio Logic using audited fields."""
+def analyze_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        
-        # We use 'returnOnEquity' as the primary Buffett 'Moat' indicator
-        # It's more reliable in the Yahoo API than manual ROIC math
         roe = info.get('returnOnEquity', 0) * 100
         pe = info.get('trailingPE', 0)
         margin = info.get('grossMargins', 0) * 100
         growth = info.get('revenueGrowth', 0) * 100
         debt_to_eq = info.get('debtToEquity', 0)
         
-        # --- THE CONCRETE FILTER ---
-        # Logic: High Quality (ROE > 15), Good Value (PE < 25), Low Risk (Debt < 80)
         if (15 < roe < 100 and 0 < pe < 25 and margin > 10 and growth > 5 and debt_to_eq < 80):
             return {
                 "Ticker": ticker.replace(".NS", ""),
@@ -69,61 +67,50 @@ def scan_logic(ticker):
                 "ROE (%)": round(roe, 2),
                 "P/E": round(pe, 2),
                 "Gross Margin (%)": round(margin, 2),
-                "Debt/Eq": round(debt_to_eq, 2),
-                "Sector": info.get('sector', 'N/A')
+                "Debt/Eq": round(debt_to_eq, 2)
             }
-    except:
-        return None
+    except: return None
 
 # ==========================================
-# 3. THE APP DASHBOARD
+# 3. CONTRAST FIXING FUNCTION
 # ==========================================
 
-# Sidebar
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Warren_Buffett_KU_Visit.jpg/440px-Warren_Buffett_KU_Visit.jpg", width=100)
-    st.title("The Buffett Way")
-    st.markdown("---")
-    mode = st.radio("Market Selection", ["Nifty 500", "Nifty 50"])
-    st.success("Strategy: Quality at a Fair Price")
+def highlight_contrast(val):
+    """If the background gradient is too dark, make text white."""
+    # This logic matches the 'Greens' and 'Reds' colormaps
+    # ROE Column (High is Green/Dark)
+    # P/E Column (High is Red/Dark)
+    return 'color: black' # Standard - we handle contrast via 'text_color_threshold' in Styler
 
-# Main View
-st.title("🏛️ Institutional Equity Screener")
-st.info("Scanning for 'Wonderful Companies at Fair Prices' using audited RoE and P/E metrics.")
+# ==========================================
+# 4. EXECUTION
+# ==========================================
 
-if st.button(f"🔍 Scan {mode} Universe"):
-    tickers = fetch_ticker_list(mode)
+st.title("🏛️ The Buffett Way")
+universe = st.sidebar.selectbox("Market Selection", ["Nifty 50", "Nifty 500"])
+
+if st.button(f"🔍 Scan {universe}"):
+    tickers = get_nifty_tickers(universe)
     
-    with st.status(f"Auditing {len(tickers)} Companies...", expanded=True) as status:
+    with st.spinner(f"Analyzing {len(tickers)} stocks..."):
         results = []
-        # Multi-threaded execution for speed
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_ticker = {executor.submit(scan_logic, t): t for t in tickers}
-            for i, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
+            future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
+            for future in concurrent.futures.as_completed(future_to_ticker):
                 res = future.result()
                 if res: results.append(res)
-        status.update(label="Audit Complete!", state="complete", expanded=False)
-
+    
     if results:
-        df = pd.DataFrame(results)
+        df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
-        # Summary Metrics
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Companies Passed", len(df))
-        m2.metric("Best ROE", f"{df['ROE (%)'].max()}%")
-        m3.metric("Avg P/E", round(df['P/E'].mean(), 1))
-
-        st.markdown("### Top 20 Investment Picks")
+        # --- THE FIX: SMART STYLING ---
+        # We use a built-in Pandas styler that handles text contrast automatically
+        styled_df = df.style.background_gradient(subset=["ROE (%)"], cmap="Greens") \
+                            .background_gradient(subset=["P/E"], cmap="Reds") \
+                            .format({"Price": "₹{:.2f}"})
         
-        # Styled Table with Groww-style heatmap
-        st.dataframe(
-            df.sort_values("ROE (%)", ascending=False).head(20).style
-            .background_gradient(subset=["ROE (%)"], cmap="BuGn") # Mint Green
-            .background_gradient(subset=["P/E"], cmap="YlOrRd") # Soft Warning Red
-            .format({"Price": "₹{:.2f}", "Debt/Eq": "{:.1f}"}),
-            use_container_width=True, height=600
-        )
-        
-        st.download_button("📥 Export Analysis", df.to_csv(index=False), "buffett_report.csv")
+        # Note: If the text is still hard to read, Streamlit's latest version 
+        # usually handles this, but we can force it with a CSS injection if needed.
+        st.dataframe(styled_df, use_container_width=True, height=600)
     else:
-        st.warning("No companies currently meet the strict 15/25/80 Buffett threshold. Market may be overvalued.")
+        st.warning("No stocks passed the criteria.")

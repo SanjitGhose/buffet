@@ -11,23 +11,37 @@ st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏦"
 
 st.markdown("""
 <style>
+    /* Force Background and Header Colors */
     .stApp { background-color: #ffffff !important; }
     h1, h2, h3 { color: #0f172a !important; font-weight: 800 !important; }
 
-    /* SIDEBAR & WIDGET CONTRAST */
+    /* SIDEBAR CONTRAST FIX */
     [data-testid="stSidebar"] {
         background-color: #f1f5f9 !important;
         border-right: 2px solid #cbd5e1;
     }
     
-    /* High-Contrast for Sliders, Selectboxes, and Labels */
-    [data-testid="stSidebar"] p, 
-    [data-testid="stSidebar"] label,
-    div[data-baseweb="select"] *,
-    div[data-testid="stTickBarMin"],
-    div[data-testid="stTickBarMax"] {
+    /* DROPDOWN (SELECTBOX) READABILITY FIX */
+    /* Target the container, the input, and the text inside */
+    div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 2px solid #0f172a !important; /* Thick contrast border */
+        border-radius: 8px !important;
+    }
+    
+    /* Force the text inside the Market Selection to be Deep Navy */
+    div[data-baseweb="select"] * {
         color: #0f172a !important;
         font-weight: 700 !important;
+    }
+
+    /* SLIDER & LABEL CONTRAST */
+    [data-testid="stSidebar"] p, 
+    [data-testid="stSidebar"] label,
+    [data-testid="stWidgetLabel"] p {
+        color: #0f172a !important;
+        font-weight: 800 !important;
+        font-size: 1rem !important;
     }
 
     /* Groww-Green Button */
@@ -35,16 +49,21 @@ st.markdown("""
         background-color: #00d09c;
         color: white !important;
         border-radius: 8px;
+        padding: 0.8rem;
         font-weight: 800;
         border: none;
         width: 100%;
         transition: 0.3s;
     }
+    .stButton>button:hover {
+        background-color: #00b386;
+        box-shadow: 0 4px 12px rgba(0, 208, 156, 0.3);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA ENGINE
+# 2. ANALYTICS ENGINE
 # ==========================================
 
 def get_nifty_tickers(universe):
@@ -70,8 +89,8 @@ def analyze_stock(ticker, u_roe, u_pe, u_growth, u_margin):
         
         graham_val = np.sqrt(22.5 * eps * book_val) if (eps > 0 and book_val > 0) else 0
 
-        # USE USER-DEFINED CRITERIA
-        if (u_roe < roe < 100 and rev_growth > u_growth and gross_margin > u_margin and 0 < pe < u_pe):
+        # Logic using adjustable user thresholds
+        if (u_roe <= roe < 100 and rev_growth > u_growth and gross_margin > u_margin and 0 < pe < u_pe):
             return {
                 "Ticker": ticker.replace(".NS", ""),
                 "Price": price,
@@ -84,33 +103,30 @@ def analyze_stock(ticker, u_roe, u_pe, u_growth, u_margin):
     except: return None
 
 # ==========================================
-# 3. INTERFACE WITH ADJUSTABLE SIDEBAR
+# 3. INTERFACE
 # ==========================================
 
 st.markdown('<h1>🏛️ The Buffett Way</h1>', unsafe_allow_html=True)
-st.markdown('<h3>Adaptive Value & Quality Screener</h3>', unsafe_allow_html=True)
+st.markdown('<h3>Intrinsic Value & Quality Screener</h3>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("## ⚙️ ADJUST CRITERIA")
+    st.markdown("## ⚙️ SETTINGS")
+    # Market selection with forced contrast
     universe = st.selectbox("Market Selection", ["Nifty 50", "Nifty 500"])
     
     st.markdown("---")
-    # Dynamic Sliders with Buffett Defaults
+    st.markdown("### 🛠️ ADJUST FILTERS")
     user_pe = st.slider("Max P/E Ratio", 5, 50, 25)
     user_roe = st.slider("Min ROE (%)", 5, 30, 15)
     user_margin = st.slider("Min Gross Margin (%)", 5, 40, 15)
     user_growth = st.slider("Min Revenue Growth (%)", 0, 30, 5)
-    
-    st.markdown("---")
-    st.info("The defaults represent Buffett's core 'Quality at a Fair Price' logic.")
 
-if st.button(f"🔍 SCAN {universe}"):
+if st.button(f"🔍 EXECUTE {universe} SCAN"):
     tickers = get_nifty_tickers(universe)
     
-    with st.spinner(f"Auditing {len(tickers)} stocks with your custom filters..."):
+    with st.spinner(f"Auditing {len(tickers)} companies..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
-            # Pass user criteria into the function
             future_to_ticker = {executor.submit(analyze_stock, t, user_roe, user_pe, user_growth, user_margin): t for t in tickers}
             for future in concurrent.futures.as_completed(future_to_ticker):
                 res = future.result()
@@ -119,6 +135,7 @@ if st.button(f"🔍 SCAN {universe}"):
     if results:
         df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
+        # Pastel Heatmaps (Safe for Black Text)
         styled_df = df.style.background_gradient(subset=["ROE (%)"], cmap="YlGn") \
                            .background_gradient(subset=["P/E"], cmap="YlOrRd_r") \
                            .format({
@@ -131,4 +148,4 @@ if st.button(f"🔍 SCAN {universe}"):
 
         st.dataframe(styled_df, use_container_width=True, height=600)
     else:
-        st.error("No companies met your specific criteria. Try loosening the P/E or ROE limits.")
+        st.error("No stocks matched these criteria. Try loosening the filters in the sidebar.")

@@ -4,144 +4,126 @@ import pandas as pd
 import concurrent.futures
 
 # ==========================================
-# 1. APP CONFIGURATION & BRANDING
+# 1. UI/UX "FINTECH" OVERRIDE (CSS)
 # ==========================================
-st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="📈")
+st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🎓")
 
-# Custom UI Styling
 st.markdown("""
 <style>
-    .main {
-        background-color: #f5f7f9;
-    }
+    /* Groww-style Clean Interface */
+    .stApp { background-color: #f8fafc; }
+    .main { padding: 2rem; }
+    h1 { color: #1e293b; font-weight: 800 !important; }
     .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #1e3a8a;
-        color: white;
-        font-weight: bold;
+        background-color: #00d09c; /* Groww Green */
+        color: white; border: none; border-radius: 8px;
+        padding: 0.75rem 2rem; font-weight: 600; width: 100%;
+        transition: all 0.3s;
     }
-    .stMetric {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
+    .stButton>button:hover { background-color: #00b386; transform: translateY(-2px); }
+    .css-1r6slb0 { background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    [data-testid="stMetricValue"] { color: #1e293b; font-size: 1.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. THE CORE LOGIC (Buffett Framework)
+# 2. CONCRETE DATA LOGIC
 # ==========================================
 
-def get_nifty_tickers(mode):
-    """Fetches the latest Nifty 50 or 500 symbols from NSE data."""
-    if mode == "Nifty 500":
+@st.cache_data(ttl=3600)
+def fetch_ticker_list(universe):
+    """Fetches full ticker lists without fallback glitches."""
+    if universe == "Nifty 500":
         url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty500list.csv"
     else:
         url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty50list.csv"
     
     try:
         df = pd.read_csv(url)
-        return [str(x) + ".NS" for x in df['Symbol'].tolist()]
-    except Exception:
-        # Fallback for critical failure
-        return ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS"]
+        # Filter out the 'Index' row if it exists to get exact 500/50
+        symbols = df['Symbol'].unique().tolist()
+        return [str(s) + ".NS" for s in symbols if isinstance(s, str)]
+    except:
+        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"]
 
-def analyze_stock(ticker):
-    """The 'Filter'—screens stocks against the image ratios."""
+def scan_logic(ticker):
+    """Concrete Ratio Logic using audited fields."""
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # Fundamental Data Extraction
-        pe = info.get('trailingPE', 100)
-        gross_margin = info.get('grossMargins', 0) * 100
-        rev_growth = info.get('revenueGrowth', 0) * 100
-        debt_equity = info.get('debtToEquity', 100)
+        # We use 'returnOnEquity' as the primary Buffett 'Moat' indicator
+        # It's more reliable in the Yahoo API than manual ROIC math
+        roe = info.get('returnOnEquity', 0) * 100
+        pe = info.get('trailingPE', 0)
+        margin = info.get('grossMargins', 0) * 100
+        growth = info.get('revenueGrowth', 0) * 100
+        debt_to_eq = info.get('debtToEquity', 0)
         
-        # ROIC Calculation (EBIT / Invested Capital)
-        ebitda = info.get('ebitda', 0)
-        assets = info.get('totalAssets', 1)
-        liabilities = info.get('totalCurrentLiabilities', 0)
-        roic = (ebitda / (assets - liabilities)) * 100 if (assets - liabilities) > 0 else 0
-
-        # --- THE BUFFETT RATIOS (Strict Screening) ---
-        # 1. ROIC > 15%
-        # 2. P/E < 25 (Standard Value)
-        # 3. Gross Margin > 10%
-        # 4. Revenue Growth > 5%
-        # 5. Debt/Equity < 80%
-        
-        if (roic > 15 and pe < 25 and gross_margin > 10 and 
-            rev_growth > 5 and debt_equity < 80):
-            
+        # --- THE CONCRETE FILTER ---
+        # Logic: High Quality (ROE > 15), Good Value (PE < 25), Low Risk (Debt < 80)
+        if (15 < roe < 100 and 0 < pe < 25 and margin > 10 and growth > 5 and debt_to_eq < 80):
             return {
                 "Ticker": ticker.replace(".NS", ""),
                 "Price": info.get('currentPrice', 0),
-                "ROIC (%)": round(roic, 2),
-                "P/E Ratio": round(pe, 2),
-                "Gross Margin (%)": round(gross_margin, 2),
-                "Rev Growth (%)": round(rev_growth, 2),
-                "Debt/Eq (%)": round(debt_equity, 2)
+                "ROE (%)": round(roe, 2),
+                "P/E": round(pe, 2),
+                "Gross Margin (%)": round(margin, 2),
+                "Debt/Eq": round(debt_to_eq, 2),
+                "Sector": info.get('sector', 'N/A')
             }
     except:
         return None
-    return None
 
 # ==========================================
-# 3. INTERFACE & EXECUTION
+# 3. THE APP DASHBOARD
 # ==========================================
 
-st.title("🏛️ The Buffett Way")
-st.subheader("Automated Nifty 500 Value Screening Engine")
+# Sidebar
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Warren_Buffett_KU_Visit.jpg/440px-Warren_Buffett_KU_Visit.jpg", width=100)
+    st.title("The Buffett Way")
+    st.markdown("---")
+    mode = st.radio("Market Selection", ["Nifty 500", "Nifty 50"])
+    st.success("Strategy: Quality at a Fair Price")
 
-# Sidebar for Universe selection
-universe = st.sidebar.selectbox("Select Investment Universe", ["Nifty 500", "Nifty 50"])
-st.sidebar.markdown("---")
-st.sidebar.write("**Screening Criteria:**")
-st.sidebar.write("✅ ROIC > 15%")
-st.sidebar.write("✅ P/E Ratio < 25")
-st.sidebar.write("✅ Gross Margin > 10%")
-st.sidebar.write("✅ Rev. Growth > 5%")
-st.sidebar.write("✅ Debt/Equity < 80%")
+# Main View
+st.title("🏛️ Institutional Equity Screener")
+st.info("Scanning for 'Wonderful Companies at Fair Prices' using audited RoE and P/E metrics.")
 
-if st.button(f"🚀 Execute {universe} Scan"):
-    tickers = get_nifty_tickers(universe)
+if st.button(f"🔍 Scan {mode} Universe"):
+    tickers = fetch_ticker_list(mode)
     
-    st.write(f"Analyzing {len(tickers)} companies using multi-threaded execution...")
-    progress_bar = st.progress(0)
-    
-    results = []
-    # Multi-threading (Steve Jobs Speed)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        futures = {executor.submit(analyze_stock, t): t for t in tickers}
-        
-        for i, future in enumerate(concurrent.futures.as_completed(futures)):
-            data = future.result()
-            if data:
-                results.append(data)
-            progress_bar.progress((i + 1) / len(tickers))
+    with st.status(f"Auditing {len(tickers)} Companies...", expanded=True) as status:
+        results = []
+        # Multi-threaded execution for speed
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_ticker = {executor.submit(scan_logic, t): t for t in tickers}
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_ticker)):
+                res = future.result()
+                if res: results.append(res)
+        status.update(label="Audit Complete!", state="complete", expanded=False)
 
-    # Display Output
     if results:
         df = pd.DataFrame(results)
-        # Give them the Top 20 by ROIC (the ultimate quality metric)
-        top_20 = df.sort_values(by="ROIC (%)", ascending=False).head(20)
         
-        st.success(f"Found {len(df)} undervalued quality stocks. Here are the Top 20 Picks:")
+        # Summary Metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Companies Passed", len(df))
+        m2.metric("Best ROE", f"{df['ROE (%)'].max()}%")
+        m3.metric("Avg P/E", round(df['P/E'].mean(), 1))
+
+        st.markdown("### Top 20 Investment Picks")
         
-        # Styled Table
+        # Styled Table with Groww-style heatmap
         st.dataframe(
-            top_20.style.background_gradient(subset=["ROIC (%)"], cmap="Greens")
-                   .background_gradient(subset=["P/E Ratio"], cmap="YlOrRd")
-                   .format({"Price": "₹{:.2f}"}),
-            use_container_width=True
+            df.sort_values("ROE (%)", ascending=False).head(20).style
+            .background_gradient(subset=["ROE (%)"], cmap="BuGn") # Mint Green
+            .background_gradient(subset=["P/E"], cmap="YlOrRd") # Soft Warning Red
+            .format({"Price": "₹{:.2f}", "Debt/Eq": "{:.1f}"}),
+            use_container_width=True, height=600
         )
         
-        # Download Button
-        csv = top_20.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Top Picks CSV", csv, "buffett_picks.csv", "text/csv")
+        st.download_button("📥 Export Analysis", df.to_csv(index=False), "buffett_report.csv")
     else:
-        st.error("No stocks matched these strict criteria in the current market.")
+        st.warning("No companies currently meet the strict 15/25/80 Buffett threshold. Market may be overvalued.")

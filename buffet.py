@@ -5,116 +5,125 @@ import numpy as np
 import concurrent.futures
 
 # ==========================================
-# 1. UI/UX "HIGH-CONTRAST" GROWW THEME
+# 1. READABILITY & CONTRAST CSS
 # ==========================================
 st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏛️")
 
 st.markdown("""
 <style>
+    /* Force Background to Pure White */
     .stApp { background-color: #ffffff; }
-    h1 { color: #1e293b; font-family: 'Inter', sans-serif; }
-    .stButton>button {
-        background-color: #00d09c; color: white; border-radius: 8px;
-        padding: 0.75rem; font-weight: 700; border: none;
+    
+    /* High-Contrast Title: Deep Navy */
+    .main-title {
+        color: #0f172a; 
+        font-size: 3.5rem !important;
+        font-weight: 800 !important;
+        margin-bottom: 0px !important;
     }
-    /* Metric Card Styling */
-    [data-testid="stMetric"] {
-        background-color: #f8fafc; padding: 15px;
-        border-radius: 10px; border: 1px solid #e2e8f0;
+    
+    /* High-Contrast Subheader: Muted Steel Blue */
+    .sub-title {
+        color: #334155;
+        font-size: 1.5rem !important;
+        font-weight: 500 !important;
+        margin-top: -10px !important;
+        margin-bottom: 25px !important;
+    }
+
+    /* Groww-Green Button */
+    .stButton>button {
+        background-color: #00d09c;
+        color: white;
+        font-weight: 700;
+        border: none;
+        border-radius: 8px;
+        padding: 0.8rem;
+    }
+    
+    /* Fix Sidebar Contrast */
+    [data-testid="stSidebar"] {
+        background-color: #f1f5f9;
+        border-right: 1px solid #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. THE GRAHAM LOGIC
+# 2. THE ANALYTICS ENGINE (Graham & ROE)
 # ==========================================
 
-def calculate_graham_number(eps, bvps):
-    """
-    Graham Number = sqrt(22.5 * EPS * BVPS)
-    The maximum price a defensive investor should pay.
-    """
+def calculate_graham(eps, bvps):
+    # Graham Number = sqrt(22.5 * EPS * BVPS)
     if eps <= 0 or bvps <= 0: return 0
     return np.sqrt(22.5 * eps * bvps)
 
-def analyze_stock(ticker):
+def scan_logic(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # Core Ratios
+        # Pulling Core Metrics
         roe = info.get('returnOnEquity', 0) * 100
-        pe = info.get('trailingPE', 0)
-        curr_price = info.get('currentPrice', 0)
-        
-        # Graham Components
         eps = info.get('trailingEps', 0)
         bvps = info.get('bookValue', 0)
-        graham_val = calculate_graham_number(eps, bvps)
+        price = info.get('currentPrice', 0)
         
-        # Filtering for "Wonderful Companies"
-        if (15 < roe < 100 and 0 < pe < 35 and info.get('debtToEquity', 100) < 100):
-            
-            upside = ((graham_val - curr_price) / curr_price) * 100 if graham_val > 0 else -100
+        graham = calculate_graham(eps, bvps)
+        
+        # The 'Buffett-Graham' Filter
+        if (15 < roe < 100 and info.get('trailingPE', 0) < 30):
+            upside = ((graham - price) / price) * 100 if graham > 0 else -100
             
             return {
                 "Ticker": ticker.replace(".NS", ""),
-                "Price": curr_price,
-                "Graham Intrinsic": round(graham_val, 2),
-                "ROE (%)": round(roe, 2),
-                "P/E": round(pe, 2),
+                "Price": price,
+                "Graham Val": round(graham, 2),
                 "Upside (%)": round(upside, 1),
+                "ROE (%)": round(roe, 2),
                 "Sector": info.get('sector', 'N/A')
             }
     except: return None
 
 # ==========================================
-# 3. INTERFACE & DISPLAY
+# 3. INTERFACE EXECUTION
 # ==========================================
 
-st.title("🏛️ The Buffett Way")
-st.subheader("Intrinsic Value & Quality Screener")
+# CUSTOM HTML HEADERS FOR PERFECT READABILITY
+st.markdown('<p class="main-title">The Buffett Way</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Intrinsic Value & Quality Screener</p>', unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown("### Strategy")
-    st.write("Finds companies where **ROE > 15%** and price is near or below the **Graham Number**.")
-    universe = st.radio("Market", ["Nifty 50", "Nifty 500"])
+universe = st.sidebar.radio("Select Universe", ["Nifty 50", "Nifty 500"])
 
-if st.button(f"🚀 Execute {universe} Value Scan"):
-    # Fallback Ticker Fetching
+if st.button(f"🚀 Analyze {universe}"):
+    # Ticker Fetching
     url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty500list.csv" if universe == "Nifty 500" else "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty50list.csv"
     try:
         tickers = [s + ".NS" for s in pd.read_csv(url)['Symbol'].tolist()]
     except:
-        tickers = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS"] # Minimal fallback
-        
-    with st.spinner("Calculating Intrinsic Values..."):
+        tickers = ["TCS.NS", "RELIANCE.NS", "INFY.NS", "HDFCBANK.NS"]
+
+    with st.spinner("Calculating 'Margin of Safety'..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
+            future_to_ticker = {executor.submit(scan_logic, t): t for t in tickers}
             for future in concurrent.futures.as_completed(future_to_ticker):
                 res = future.result()
                 if res: results.append(res)
 
     if results:
-        df = pd.DataFrame(results)
+        df = pd.DataFrame(results).sort_values("Upside (%)", ascending=False)
         
-        # Metrics Row
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Opportunities Found", len(df))
-        c2.metric("Best Value Play", df.sort_values("Upside (%)", ascending=False).iloc[0]['Ticker'])
-        c3.metric("Avg Quality (ROE)", f"{round(df['ROE (%)'].mean(),1)}%")
+        # Pastel Heatmap for the table (Safe for Black Text)
+        def color_map(val):
+            # Soft Green for positive upside, Soft Red for negative
+            color = '#e6fffa' if val > 0 else '#fff5f5'
+            return f'background-color: {color}; color: #1a202c;'
 
-        # --- THE SMART CONTRAST STYLER ---
-        # Using 'Pastel' maps to ensure text is ALWAYS readable
-        def color_upside(val):
-            color = '#dcfce7' if val > 0 else '#fee2e2' # Soft Mint vs Soft Peach
-            return f'background-color: {color}'
-
-        styled_df = df.style.applymap(color_upside, subset=['Upside (%)']) \
-                            .background_gradient(subset=['ROE (%)'], cmap='GnBu', low=0, high=0.3) \
-                            .format({"Price": "₹{:.2f}", "Graham Intrinsic": "₹{:.2f}", "Upside (%)": "{:+.1f}%"})
+        styled_df = df.style.applymap(color_map, subset=['Upside (%)']) \
+                            .background_gradient(subset=['ROE (%)'], cmap='YlGnBu') \
+                            .format({"Price": "₹{:.2f}", "Graham Val": "₹{:.2f}"})
 
         st.dataframe(styled_df, use_container_width=True, height=500)
     else:
-        st.error("No companies currently meet the Buffett-Graham safety threshold.")
+        st.error("No stocks passed the safety criteria.")

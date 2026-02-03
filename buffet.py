@@ -5,83 +5,82 @@ import numpy as np
 import concurrent.futures
 
 # ==========================================
-# 1. READABILITY & CONTRAST CSS
+# 1. UI/UX HIGH-CONTRAST "GROWW" STYLING
 # ==========================================
-st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏛️")
+st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏦")
 
 st.markdown("""
 <style>
-    /* Force Background to Pure White */
+    /* Force High Contrast for Main App */
     .stApp { background-color: #ffffff; }
     
-    /* High-Contrast Title: Deep Navy */
-    .main-title {
-        color: #0f172a; 
-        font-size: 3.5rem !important;
-        font-weight: 800 !important;
-        margin-bottom: 0px !important;
+    /* Make Titles & Headers Bold and Dark Charcoal */
+    h1, h2, h3, .stMarkdown p {
+        color: #0f172a !important; 
+        font-family: 'Inter', sans-serif;
     }
     
-    /* High-Contrast Subheader: Muted Steel Blue */
-    .sub-title {
-        color: #334155;
-        font-size: 1.5rem !important;
-        font-weight: 500 !important;
-        margin-top: -10px !important;
-        margin-bottom: 25px !important;
+    /* Force Sidebar Text to be Deep Navy for Readability */
+    [data-testid="stSidebar"] {
+        background-color: #f1f5f9 !important;
+        border-right: 1px solid #cbd5e1;
+    }
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
     }
 
-    /* Groww-Green Button */
+    /* Groww Green Button */
     .stButton>button {
         background-color: #00d09c;
-        color: white;
-        font-weight: 700;
-        border: none;
-        border-radius: 8px;
-        padding: 0.8rem;
-    }
-    
-    /* Fix Sidebar Contrast */
-    [data-testid="stSidebar"] {
-        background-color: #f1f5f9;
-        border-right: 1px solid #e2e8f0;
+        color: white; border: none; border-radius: 8px;
+        padding: 0.75rem 2rem; font-weight: 700; width: 100%;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. THE ANALYTICS ENGINE (Graham & ROE)
+# 2. DATA LOGIC & GRAHAM FORMULA
 # ==========================================
 
-def calculate_graham(eps, bvps):
-    # Graham Number = sqrt(22.5 * EPS * BVPS)
-    if eps <= 0 or bvps <= 0: return 0
-    return np.sqrt(22.5 * eps * bvps)
+def get_nifty_tickers(universe):
+    url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty500list.csv" if universe == "Nifty 500" else "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty50list.csv"
+    try:
+        df = pd.read_csv(url)
+        return [str(s) + ".NS" for s in df['Symbol'].tolist()]
+    except:
+        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "ITC.NS", "SBIN.NS"]
 
-def scan_logic(ticker):
+def analyze_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # Pulling Core Metrics
+        # Fundamental Data
         roe = info.get('returnOnEquity', 0) * 100
+        pe = info.get('trailingPE', 0)
         eps = info.get('trailingEps', 0)
-        bvps = info.get('bookValue', 0)
+        book_val = info.get('bookValue', 0)
         price = info.get('currentPrice', 0)
         
-        graham = calculate_graham(eps, bvps)
-        
-        # The 'Buffett-Graham' Filter
-        if (15 < roe < 100 and info.get('trailingPE', 0) < 30):
-            upside = ((graham - price) / price) * 100 if graham > 0 else -100
-            
+        # Graham Calculation: sqrt(22.5 * EPS * BVPS)
+        if eps > 0 and book_val > 0:
+            graham_val = np.sqrt(22.5 * eps * book_val)
+        else:
+            graham_val = 0
+
+        # The Filter Gate
+        if (15 < roe < 100 and 0 < pe < 30):
             return {
                 "Ticker": ticker.replace(".NS", ""),
                 "Price": price,
-                "Graham Val": round(graham, 2),
-                "Upside (%)": round(upside, 1),
+                "Graham Val": round(graham_val, 2),
                 "ROE (%)": round(roe, 2),
-                "Sector": info.get('sector', 'N/A')
+                "P/E": round(pe, 2),
+                "Gross Margin (%)": round(info.get('grossMargins', 0) * 100, 2),
+                "Debt/Eq": round(info.get('debtToEquity', 0), 2)
             }
     except: return None
 
@@ -89,41 +88,40 @@ def scan_logic(ticker):
 # 3. INTERFACE EXECUTION
 # ==========================================
 
-# CUSTOM HTML HEADERS FOR PERFECT READABILITY
-st.markdown('<p class="main-title">The Buffett Way</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Intrinsic Value & Quality Screener</p>', unsafe_allow_html=True)
+st.title("🏛️ The Buffett Way")
+st.markdown("### Intrinsic Value & Quality Screener")
 
-universe = st.sidebar.radio("Select Universe", ["Nifty 50", "Nifty 500"])
+with st.sidebar:
+    st.markdown("## Configuration")
+    universe = st.selectbox("Market Selection", ["Nifty 50", "Nifty 500"])
+    st.info("Logic: Graham Number vs Market Price")
 
-if st.button(f"🚀 Analyze {universe}"):
-    # Ticker Fetching
-    url = "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty500list.csv" if universe == "Nifty 500" else "https://raw.githubusercontent.com/kprohith/nse-stock-analysis/master/ind_nifty50list.csv"
-    try:
-        tickers = [s + ".NS" for s in pd.read_csv(url)['Symbol'].tolist()]
-    except:
-        tickers = ["TCS.NS", "RELIANCE.NS", "INFY.NS", "HDFCBANK.NS"]
-
-    with st.spinner("Calculating 'Margin of Safety'..."):
+if st.button(f"🔍 Scan {universe}"):
+    tickers = get_nifty_tickers(universe)
+    
+    with st.spinner(f"Auditing {len(tickers)} stocks..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_ticker = {executor.submit(scan_logic, t): t for t in tickers}
+            future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
             for future in concurrent.futures.as_completed(future_to_ticker):
                 res = future.result()
                 if res: results.append(res)
-
+    
     if results:
-        df = pd.DataFrame(results).sort_values("Upside (%)", ascending=False)
+        df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
-        # Pastel Heatmap for the table (Safe for Black Text)
-        def color_map(val):
-            # Soft Green for positive upside, Soft Red for negative
-            color = '#e6fffa' if val > 0 else '#fff5f5'
-            return f'background-color: {color}; color: #1a202c;'
+        # --- UI FIX: READABLE PASTEL STYLING ---
+        # Using light pastels (Mint & Peach) so black text is 100% visible
+        def style_logic(df):
+            return df.style.background_gradient(subset=["ROE (%)"], cmap="GnBu") \
+                           .background_gradient(subset=["P/E"], cmap="OrRd") \
+                           .format({
+                               "Price": "₹{:.2f}", 
+                               "Graham Val": "₹{:.2f}",
+                               "ROE (%)": "{:.1f}%",
+                               "Debt/Eq": "{:.2f}"
+                           })
 
-        styled_df = df.style.applymap(color_map, subset=['Upside (%)']) \
-                            .background_gradient(subset=['ROE (%)'], cmap='YlGnBu') \
-                            .format({"Price": "₹{:.2f}", "Graham Val": "₹{:.2f}"})
-
-        st.dataframe(styled_df, use_container_width=True, height=500)
+        st.dataframe(style_logic(df), use_container_width=True, height=600)
     else:
-        st.error("No stocks passed the safety criteria.")
+        st.error("No stocks passed the Graham-Buffett safety threshold.")

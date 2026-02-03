@@ -5,44 +5,47 @@ import numpy as np
 import concurrent.futures
 
 # ==========================================
-# 1. UI/UX HIGH-CONTRAST "GROWW" STYLING
+# 1. HIGH-CONTRAST READABILITY CSS
 # ==========================================
 st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏦")
 
 st.markdown("""
 <style>
-    /* Force High Contrast for Main App */
+    /* Force Pure White Background for Main App */
     .stApp { background-color: #ffffff; }
     
-    /* Make Titles & Headers Bold and Dark Charcoal */
-    h1, h2, h3, .stMarkdown p {
-        color: #0f172a !important; 
-        font-family: 'Inter', sans-serif;
-    }
-    
-    /* Force Sidebar Text to be Deep Navy for Readability */
-    [data-testid="stSidebar"] {
-        background-color: #f1f5f9 !important;
-        border-right: 1px solid #cbd5e1;
-    }
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {
-        color: #1e293b !important;
-        font-weight: 600 !important;
-        font-size: 1.1rem !important;
+    /* Global Text Contrast: Deep Charcoal */
+    h1, h2, h3, p, span, label {
+        color: #111827 !important; 
+        font-family: 'Inter', -apple-system, sans-serif;
     }
 
-    /* Groww Green Button */
+    /* Sidebar Contrast: Light Grey Background with Dark Text */
+    [data-testid="stSidebar"] {
+        background-color: #f3f4f6 !important;
+        border-right: 1px solid #d1d5db;
+    }
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {
+        color: #111827 !important;
+        font-weight: 700 !important;
+    }
+
+    /* Groww-Green Button: High Contrast White Text */
     .stButton>button {
         background-color: #00d09c;
-        color: white; border: none; border-radius: 8px;
-        padding: 0.75rem 2rem; font-weight: 700; width: 100%;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        color: #ffffff !important;
+        border: none;
+        border-radius: 8px;
+        padding: 0.8rem;
+        font-weight: 700;
+        width: 100%;
+        font-size: 1.1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA LOGIC & GRAHAM FORMULA
+# 2. DATA ENGINE: QUALITY + GROWTH + VALUE
 # ==========================================
 
 def get_nifty_tickers(universe):
@@ -51,35 +54,33 @@ def get_nifty_tickers(universe):
         df = pd.read_csv(url)
         return [str(s) + ".NS" for s in df['Symbol'].tolist()]
     except:
-        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "ITC.NS", "SBIN.NS"]
+        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "ITC.NS"]
 
 def analyze_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # Fundamental Data
+        # Pulling Metrics
         roe = info.get('returnOnEquity', 0) * 100
         pe = info.get('trailingPE', 0)
+        rev_growth = info.get('revenueGrowth', 0) * 100
         eps = info.get('trailingEps', 0)
         book_val = info.get('bookValue', 0)
         price = info.get('currentPrice', 0)
         
-        # Graham Calculation: sqrt(22.5 * EPS * BVPS)
-        if eps > 0 and book_val > 0:
-            graham_val = np.sqrt(22.5 * eps * book_val)
-        else:
-            graham_val = 0
+        # Graham Formula: sqrt(22.5 * EPS * BVPS)
+        graham_val = np.sqrt(22.5 * eps * book_val) if (eps > 0 and book_val > 0) else 0
 
-        # The Filter Gate
-        if (15 < roe < 100 and 0 < pe < 30):
+        # STRICT FILTER: Quality > 15% | Growth > 5% | Value P/E < 30
+        if (15 < roe < 100 and rev_growth > 5 and 0 < pe < 30):
             return {
                 "Ticker": ticker.replace(".NS", ""),
                 "Price": price,
                 "Graham Val": round(graham_val, 2),
                 "ROE (%)": round(roe, 2),
+                "Rev Growth (%)": round(rev_growth, 2),
                 "P/E": round(pe, 2),
-                "Gross Margin (%)": round(info.get('grossMargins', 0) * 100, 2),
                 "Debt/Eq": round(info.get('debtToEquity', 0), 2)
             }
     except: return None
@@ -89,17 +90,21 @@ def analyze_stock(ticker):
 # ==========================================
 
 st.title("🏛️ The Buffett Way")
-st.markdown("### Intrinsic Value & Quality Screener")
+st.markdown("### Fundamental Growth & Value Dashboard")
 
 with st.sidebar:
-    st.markdown("## Configuration")
+    st.markdown("## Filter Settings")
     universe = st.selectbox("Market Selection", ["Nifty 50", "Nifty 500"])
-    st.info("Logic: Graham Number vs Market Price")
+    st.write("---")
+    st.markdown("**Criteria:**")
+    st.write("✅ ROE > 15%")
+    st.write("✅ Rev Growth > 5%")
+    st.write("✅ P/E < 30")
 
-if st.button(f"🔍 Scan {universe}"):
+if st.button(f"🚀 Analyze {universe}"):
     tickers = get_nifty_tickers(universe)
     
-    with st.spinner(f"Auditing {len(tickers)} stocks..."):
+    with st.spinner(f"Processing {len(tickers)} companies..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
             future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
@@ -110,18 +115,18 @@ if st.button(f"🔍 Scan {universe}"):
     if results:
         df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
-        # --- UI FIX: READABLE PASTEL STYLING ---
-        # Using light pastels (Mint & Peach) so black text is 100% visible
-        def style_logic(df):
-            return df.style.background_gradient(subset=["ROE (%)"], cmap="GnBu") \
-                           .background_gradient(subset=["P/E"], cmap="OrRd") \
+        # --- UI DESIGN: HIGH CONTRAST DATASET ---
+        # Using light pastel gradients to keep text black and readable
+        styled_df = df.style.background_gradient(subset=["ROE (%)"], cmap="YlGn") \
+                           .background_gradient(subset=["Rev Growth (%)"], cmap="BuGn") \
+                           .background_gradient(subset=["P/E"], cmap="YlOrRd") \
                            .format({
                                "Price": "₹{:.2f}", 
                                "Graham Val": "₹{:.2f}",
                                "ROE (%)": "{:.1f}%",
-                               "Debt/Eq": "{:.2f}"
+                               "Rev Growth (%)": "{:.1f}%"
                            })
 
-        st.dataframe(style_logic(df), use_container_width=True, height=600)
+        st.dataframe(styled_df, use_container_width=True, height=600)
     else:
-        st.error("No stocks passed the Graham-Buffett safety threshold.")
+        st.error("No stocks currently meet the Quality + Growth + Value criteria.")

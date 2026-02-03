@@ -5,53 +5,53 @@ import numpy as np
 import concurrent.futures
 
 # ==========================================
-# 1. ULTIMATE HIGH-CONTRAST CSS
+# 1. ULTIMATE READABILITY & CONTRAST CSS
 # ==========================================
 st.set_page_config(page_title="The Buffett Way", layout="wide", page_icon="🏦")
 
 st.markdown("""
 <style>
-    /* Force Background and Text Colors for Maximum Readability */
+    /* Main App Contrast */
     .stApp { background-color: #ffffff !important; }
     
-    /* Global Text: High-Contrast Charcoal Black */
-    h1, h2, h3, p, span, label, .stSelectbox label {
+    /* Global Text: High-Contrast Navy Black */
+    h1, h2, h3, p, span, div, label {
         color: #0f172a !important; 
-        font-family: 'Inter', -apple-system, sans-serif;
-        font-weight: 700 !important;
+        font-family: 'Inter', sans-serif;
     }
 
-    /* Sidebar: Steel Grey with Deep Navy Text */
+    /* SIDEBAR CONTRAST FIX */
+    /* Force sidebar background and high-contrast text */
     [data-testid="stSidebar"] {
-        background-color: #f8fafc !important;
-        border-right: 2px solid #e2e8f0;
+        background-color: #f1f5f9 !important;
+        border-right: 2px solid #cbd5e1;
     }
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label {
-        color: #1e293b !important;
+    
+    /* Targeting all sidebar elements: labels, text, radio buttons */
+    [data-testid="stSidebar"] .stMarkdown p, 
+    [data-testid="stSidebar"] label, 
+    [data-testid="stSidebar"] .stSelectbox div,
+    [data-testid="stSidebar"] .stRadio div {
+        color: #0f172a !important;
         font-weight: 800 !important;
-        font-size: 1.1rem !important;
+        font-size: 1.05rem !important;
     }
 
-    /* Groww-Green Button */
+    /* Groww-style Button */
     .stButton>button {
         background-color: #00d09c;
         color: #ffffff !important;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 0.8rem;
         font-weight: 800;
-        font-size: 1.2rem;
         border: none;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #00b386;
-        box-shadow: 0 10px 15px -3px rgba(0, 208, 156, 0.3);
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. THE COMPLETE ANALYTICS ENGINE
+# 2. DATA ENGINE
 # ==========================================
 
 def get_nifty_tickers(universe):
@@ -60,14 +60,13 @@ def get_nifty_tickers(universe):
         df = pd.read_csv(url)
         return [str(s) + ".NS" for s in df['Symbol'].tolist()]
     except:
-        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ITC.NS", "SBIN.NS"]
+        return ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ITC.NS"]
 
 def analyze_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        # --- DATA EXTRACTION ---
         roe = info.get('returnOnEquity', 0) * 100
         pe = info.get('trailingPE', 0)
         rev_growth = info.get('revenueGrowth', 0) * 100
@@ -76,12 +75,11 @@ def analyze_stock(ticker):
         book_val = info.get('bookValue', 0)
         price = info.get('currentPrice', 0)
         
-        # Graham Formula: sqrt(22.5 * EPS * BVPS)
+        # Graham Formula
         graham_val = np.sqrt(22.5 * eps * book_val) if (eps > 0 and book_val > 0) else 0
 
-        # --- THE MASTER FILTER ---
-        # Quality (ROE > 15) | Growth (Rev > 5) | Moat (Margin > 15) | Value (PE < 30)
-        if (15 < roe < 100 and rev_growth > 5 and gross_margin > 15 and 0 < pe < 30):
+        # Quality Filter
+        if (15 < roe < 100 and rev_growth > 5 and gross_margin > 15 and 0 < pe < 35):
             return {
                 "Ticker": ticker.replace(".NS", ""),
                 "Price": price,
@@ -89,32 +87,31 @@ def analyze_stock(ticker):
                 "ROE (%)": round(roe, 2),
                 "Rev Growth (%)": round(rev_growth, 2),
                 "Gross Margin (%)": round(gross_margin, 2),
-                "P/E": round(pe, 2),
-                "Debt/Eq": round(info.get('debtToEquity', 0), 2)
+                "P/E": round(pe, 2)
             }
     except: return None
 
 # ==========================================
-# 3. INTERFACE EXECUTION
+# 3. INTERFACE
 # ==========================================
 
-st.title("🏛️ The Buffett Way")
-st.markdown("### The Complete Growth, Quality & Value Screener")
+st.markdown('<h1>🏛️ The Buffett Way</h1>', unsafe_allow_html=True)
+st.markdown('<h3>Intrinsic Value & Growth Engine</h3>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("## SCANNER SETTINGS")
+    st.markdown("## SCANNER CONTROLS")
     universe = st.selectbox("Market Selection", ["Nifty 50", "Nifty 500"])
     st.markdown("---")
-    st.markdown("💡 **Strict Logic Applied:**")
-    st.write("1. ROE > 15% (Efficiency)")
-    st.write("2. Rev Growth > 5% (Momentum)")
-    st.write("3. Gross Margin > 15% (Moat)")
-    st.write("4. P/E < 30 (Value)")
+    st.markdown("### 📋 Filter Criteria")
+    st.write("• ROE > 15%")
+    st.write("• Growth > 5%")
+    st.write("• Margin > 15%")
+    st.write("• P/E < 35")
 
-if st.button(f"🚀 RUN {universe} AUDIT"):
+if st.button(f"🚀 RUN {universe} SCAN"):
     tickers = get_nifty_tickers(universe)
     
-    with st.spinner(f"Auditing {len(tickers)} companies via Multi-Threaded Engine..."):
+    with st.spinner(f"Analyzing {len(tickers)} companies..."):
         results = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
             future_to_ticker = {executor.submit(analyze_stock, t): t for t in tickers}
@@ -125,8 +122,7 @@ if st.button(f"🚀 RUN {universe} AUDIT"):
     if results:
         df = pd.DataFrame(results).sort_values("ROE (%)", ascending=False)
         
-        # --- UI DESIGN: READABLE PASTEL HEATMAP ---
-        # Using light palettes so black text stays sharp
+        # Pastel Heatmaps (Safe for Black Text)
         styled_df = df.style.background_gradient(subset=["ROE (%)"], cmap="YlGn") \
                            .background_gradient(subset=["Gross Margin (%)"], cmap="BuGn") \
                            .background_gradient(subset=["P/E"], cmap="YlOrRd") \
@@ -138,6 +134,6 @@ if st.button(f"🚀 RUN {universe} AUDIT"):
                                "Gross Margin (%)": "{:.1f}%"
                            })
 
-        st.dataframe(styled_df, use_container_width=True, height=650)
+        st.dataframe(styled_df, use_container_width=True, height=600)
     else:
-        st.error("No stocks met the strict 4-point Buffett criteria today.")
+        st.error("No companies currently pass the strict Value + Growth criteria.")
